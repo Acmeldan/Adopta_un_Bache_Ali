@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_google"
+        android:icon="@drawable/ic_map_google"
+        android:title="Google maps" />
+    <item
+        android:id="@+id/nav_mapbox"
+        android:title="MapBox" />
+    <item
+        android:id="@+id/nav_OSM"
+        android:title="OSM" />
+    <item
+        android:id="@+id/nav_arcgis"
+        android:title="ArcGIS" />
+    <item
+        android:id="@+id/nav_usuarios"
+        android:title="Item" />
+</menu>
