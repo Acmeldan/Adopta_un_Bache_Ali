@@ -19,6 +19,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -60,6 +61,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.osmdroid.config.Configuration;
 
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -172,6 +174,32 @@ public class activity_mapbox extends AppCompatActivity {
                         botonAdoptar.setOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View view) {
+                                //CONVERTIR LA IMAGEN TOMADA O SELECCIONADA A LA BASE 64
+                                //sacar la imagen puesta en el boton de la camara y convertirla a String Base 64
+                                Bitmap foto = ((BitmapDrawable)botonCamara.getDrawable()).getBitmap();
+                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                foto.compress(Bitmap.CompressFormat.JPEG,100,baos);
+                                byte[] fotosbyte = baos.toByteArray();
+                                String fotoString = Base64.encodeToString(fotosbyte, Base64.DEFAULT);
+                                //OBETENEMOS LA DIRECCION, LATITUD, LONGITUD DE LOS CONTROLES
+                                String direccion, latitud, longitud;
+                                direccion= txt_direccion.getText().toString();
+                                latitud = txt_latitud.getText().toString();
+                                longitud = txt_longitud.getText().toString();
+                                //creamos un objeto de la clse registrar bache
+                                RegistrarBache registrar = new RegistrarBache(direccion, latitud, longitud, fotoString);
+                                //ejecutamos el web service
+                                registrar.execute();
+                                //cerramos el botonshet la info del bache
+                                botomSheet.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                                //limpiamos los controles del boton shet
+                                txt_longitud.setText("");
+                                txt_latitud.setText("");
+                                txt_direccion.setText("");
+                                //regresar la imagen de la camara al boton
+                                botonCamara.setImageResource(R.drawable.ic_camera);
+
+
 
                             }
                         });
@@ -180,26 +208,28 @@ public class activity_mapbox extends AppCompatActivity {
                             @Override
                             public void onClick(View view) {
                                 //desplegar una alaerta con posibles opciones a realizar
-                                final CharSequence[] opciones = {"Tomar fotografía", "Desde galeria", "Cancelar"};
+                                final CharSequence[] opciones = {"Tomar fotografia", "Desde galeria", "Cancelar"};
                                 AlertDialog.Builder alerta = new AlertDialog.Builder(activity_mapbox.this);
                                 //titulo de la alerta
                                 alerta.setTitle("Adjuntar foto del bache");
 
                                 alerta.setItems(opciones, new DialogInterface.OnClickListener() {
                                     @Override
-                                    public void onClick(DialogInterface dialogInterface, int i) {
+                                    public void onClick(DialogInterface dialog, int i) {
                                         //programar la funcionalidad de las opcines
-                                        if (opciones[i].equals("Tomar fotografía")){
+                                        if (opciones[i].equals("Tomar fotografia")){
                                             //solicitar permiso a la camara en caso de que no lo tenga
                                             //verificar el SDK del telefono donde se esta ejecutando nuestra app
                                             if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
                                                 //verificar si ya tiene permisos para la camara
                                                 if(ContextCompat.checkSelfPermission(activity_mapbox.this, Manifest.permission.CAMERA)== PackageManager.PERMISSION_GRANTED) {
-                                                    ActivityCompat.requestPermissions(activity_mapbox.this, new String[]{Manifest.permission.CAMERA}, 507);
+                                                    Intent camara = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                                                    startActivityForResult(camara, 1);
                                                 }
                                                 else{
-                                                Intent camara = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                                                startActivityForResult(camara, 1);
+                                                    //solicitamos el permiso de la camara
+                                                    ActivityCompat.requestPermissions(activity_mapbox.this, new String[]{Manifest.permission.CAMERA}, 507);
+
                                                 }
                                             }
                                             else {
@@ -222,10 +252,11 @@ public class activity_mapbox extends AppCompatActivity {
                                                     return;
                                                 }
                                             }
-                                        }
-                                        else{
-                                            Intent galeria = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                                            startActivityForResult(galeria, 2);
+
+                                            else {
+                                                Intent galeria = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                                                startActivityForResult(galeria, 2);
+                                            }
                                         }
                                     }
                                 });
@@ -253,17 +284,19 @@ public class activity_mapbox extends AppCompatActivity {
     public void onActivityResult(int requestCode, int resultCode, Intent intent){
         activity_mapbox.super.onActivityResult(requestCode, resultCode, intent);
         //si se tomo una foto con la camara
-        if(requestCode==1){
+        if(requestCode == 1){
+
             Bitmap foto = (Bitmap)intent.getExtras().get("data");
             Drawable fotodrawable = new BitmapDrawable(foto);
             botonCamara.setImageDrawable(fotodrawable);
         }
-        else if(requestCode==2){
+        else if(requestCode == 2){
             Uri fotoseleccionada = intent.getData();
             String[] rutaImagen= {MediaStore.Images.Media.DATA};
             Cursor cursor = activity_mapbox.this.getApplicationContext().
-                    getContentResolver().query(fotoseleccionada, rutaImagen, null, null, null);
-                    cursor.moveToFirst();
+                    getContentResolver().
+                    query(fotoseleccionada, rutaImagen, null, null, null);
+            cursor.moveToFirst();
             int columnIndex = cursor.getColumnIndex(rutaImagen[0]);
             String archivoFoto = cursor.getString(columnIndex);
             cursor.close();
@@ -311,62 +344,62 @@ public class activity_mapbox extends AppCompatActivity {
 
 
             });
-            //clase encargada de resgistrar el bache
-            class RegistrarBache extends AsyncTask<Void, Void, String>{
-                //crear las variables de los parametros que se ocupan en el web service
-                String direccion, latitud, longitud, foto;
-                //creamos el constructor de la clase
-                RegistrarBache(String direccion, String latitud, String longitud, String foto)
-                {
-                    this.direccion = direccion;
-                    this.latitud = latitud;
-                    this.longitud = longitud;
-                    this.foto = foto;
-                }
-                @Override
-                protected String doInBackground(Void... voids) {
-                    //crar un objeto de la clase requestHandler
-                    RequestHandler requestHandler = new RequestHandler();
-                    //creamos un hashmap con los parametros que se enviaran
-                    HashMap<String, String > parametros = new HashMap<>();
-                    parametros.put("nombre", direccion);
-                    parametros.put("lat", latitud);
-                    parametros.put("lon", longitud);
-                    parametros.put("img", foto);
-                    //Retornamos la repsuesta que nos regreso el web service
-                    return requestHandler.sendPostRequest(WEB_SERVICE, parametros);
-                }
 
-                @Override
-                protected void onPostExecute(String respuesta){
-                    super.onPostExecute(respuesta);
-                    //convertimos la respuesta en un objeto JSON
-                    try {
-                        JSONObject object = new JSONObject(respuesta);
-                        //obtenemos el codigo del status
-                        int status = object.getInt("status");
-                        //si el codigo fue 1 entonces se registro correctamente el bache
-                        if (status==1){
-                            new SweetAlertDialog(activity_mapbox.this, SweetAlertDialog.SUCCESS_TYPE)
-                                    .setTitleText("Excelente!")
-                                    .setContentText(object.getString("message"))
-                                    .show();
-                        }
-                        else {
-                            new SweetAlertDialog(activity_mapbox.this, SweetAlertDialog.SUCCESS_TYPE)
-                                    .setTitleText("Ahorita no joven")
-                                    .setContentText(object.getString("message"))
-                                    .show();
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-
-                }
-            }
 
          }
+    //clase encargada de resgistrar el bache en el web service
+    class RegistrarBache extends AsyncTask<Void, Void, String>{
+        //crear las variables de los parametros que se ocupan en el web service
+        String direccion, latitud, longitud, foto;
+        //creamos el constructor de la clase
+        RegistrarBache(String direccion, String latitud, String longitud, String foto)
+        {
+            this.direccion = direccion;
+            this.latitud = latitud;
+            this.longitud = longitud;
+            this.foto = foto;
+        }
+        @Override
+        protected String doInBackground(Void... voids) {
+            //crar un objeto de la clase requestHandler
+            RequestHandler2 requestHandler = new RequestHandler2();
+            //creamos un hashmap con los parametros que se enviaran
+            HashMap<String, String > parametros = new HashMap<>();
+            parametros.put("nombre", direccion);
+            parametros.put("lat", latitud);
+            parametros.put("lon", longitud);
+            parametros.put("img", foto);
+            //Retornamos la repsuesta que nos regreso el web service
+            return requestHandler.sendPostRequest(WEB_SERVICE, parametros);
+        }
 
+        @Override
+        protected void onPostExecute(String respuesta){
+            super.onPostExecute(respuesta);
+            //convertimos la respuesta en un objeto JSON
+            try {
+                JSONObject object = new JSONObject(respuesta);
+                //obtenemos el codigo del status
+                int status = object.getInt("status");
+                //si el codigo fue 1 entonces se registro correctamente el bache
+                if (status == 1){
+                    new SweetAlertDialog(activity_mapbox.this, SweetAlertDialog.SUCCESS_TYPE)
+                            .setTitleText("Excelente!")
+                            .setContentText(object.getString("message"))
+                            .show();
+                }
+                else {
+                    new SweetAlertDialog(activity_mapbox.this, SweetAlertDialog.SUCCESS_TYPE)
+                            .setTitleText("Ahorita no joven")
+                            .setContentText(object.getString("message"))
+                            .show();
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
     @Override
     public void onStart(){
         super.onStart();
